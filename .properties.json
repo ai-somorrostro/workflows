@@ -1,0 +1,6 @@
+{
+    "name": "Check Merged PRs",
+    "description": "Verifica usuarios que han mergeado PRs",
+    "iconName": "check-circle",
+    "categories": ["Automation"]
+  }
