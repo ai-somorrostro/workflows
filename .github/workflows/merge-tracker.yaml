@@ -1,50 +1,55 @@
-# MD: merge-tracker.yaml checkeador de entregas de pull requests
 name: Check Merged PRs
 
 on:
-  pull_request:
-    types: [closed]
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      expected-users:
+        description: "Lista de usuarios esperados (separados por coma)"
+        required: false
+        type: string
 
 jobs:
   check-merges:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      - name: Instalar GitHub CLI
+        run: sudo apt-get update && sudo apt-get install -y gh
+
       - name: Check who merged
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          EXPECTED_USERS=(
-          "Asier-Merino" 
-          "clemente-rodriguez" 
-          "aimar-sarachaga" 
-          "ibai-garcia" 
-          "angel-hormilla"
-          "iker-gorostiaga04"
-          "Asier-Merino"
-          "jon-medina04"
-          "iker-pazos"
-          "asier-perez05"
-          "iker-iglesias"
-          "iker-ortiz0225"
-          "jon-juanes"
-          "samuel-rivera05"
-          "lander-ortuzar"
-          "mikel-martinez05"
-          "haimar-alvarez"
-          "xabier-vila"
-          "oier-cadierno"
-          "aritz-basarrate"
+          IFS=',' read -r -a EXPECTED_USERS <<< "${{ inputs.expected-users }}"
+          DEFAULT_USERS=(
+            "Asier-Merino"
+            "clemente-rodriguez"
+            "aimar-sarachaga"
+            "ibai-garcia"
+            "angel-hormilla"
+            "iker-gorostiaga04"
+            "Asier-Merino"
+            "jon-medina04"
+            "iker-pazos"
+            "asier-perez05"
+            "iker-iglesias"
+            "iker-ortiz0225"
+            "jon-juanes"
+            "samuel-rivera05"
+            "lander-ortuzar"
+            "mikel-martinez05"
+            "haimar-alvarez"
+            "xabier-vila"
+            "oier-cadierno"
+            "aritz-basarrate"
           )
-          
-          # Obtener usuarios que han mergeado PRs
+          USERS=("${EXPECTED_USERS[@]:-${DEFAULT_USERS[@]}}")
+
           MERGED_USERS=$(gh pr list --repo ${{ github.repository }} \
             --state merged --limit 1000 --json author \
             --jq '.[].author.login' | sort -u)
-          
+
           echo "=== ESTADO DE MERGES ==="
-          for user in "${EXPECTED_USERS[@]}"; do
+          for user in "${USERS[@]}"; do
             if echo "$MERGED_USERS" | grep -q "^${user}$"; then
               echo "✓ $user"
             else
