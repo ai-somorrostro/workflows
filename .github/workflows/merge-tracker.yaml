@@ -9,7 +9,7 @@ on:
         type: string
 
 env:
-  GH_TOKEN: ${{ secrets.workflows || github.token }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
 jobs:
   check-merges:
@@ -20,7 +20,7 @@ jobs:
 
       - name: Check who merged
         env:
-          GH_TOKEN: ${{ env.workflows }}
+          GH_TOKEN: ${{ env.GH_TOKEN }}
         run: |
           IFS=',' read -r -a EXPECTED_USERS <<< "${{ inputs.expected-users }}"
           DEFAULT_USERS=(
