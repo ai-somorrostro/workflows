@@ -8,9 +8,6 @@ on:
         required: false
         type: string
 
-env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
 jobs:
   check-merges:
     runs-on: ubuntu-latest
@@ -20,32 +17,11 @@ jobs:
 
       - name: Check who merged
         env:
-          GH_TOKEN: ${{ env.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          EXPECTED_USERS: ${{ inputs.expected-users }}
         run: |
-          IFS=',' read -r -a EXPECTED_USERS <<< "${{ inputs.expected-users }}"
-          DEFAULT_USERS=(
-            "Asier-Merino"
-            "clemente-rodriguez"
-            "aimar-sarachaga"
-            "ibai-garcia"
-            "angel-hormilla"
-            "iker-gorostiaga04"
-            "Asier-Merino"
-            "jon-medina04"
-            "iker-pazos"
-            "asier-perez05"
-            "iker-iglesias"
-            "iker-ortiz0225"
-            "jon-juanes"
-            "samuel-rivera05"
-            "lander-ortuzar"
-            "mikel-martinez05"
-            "haimar-alvarez"
-            "xabier-vila"
-            "oier-cadierno"
-            "aritz-basarrate"
-          )
-          USERS=("${EXPECTED_USERS[@]:-${DEFAULT_USERS[@]}}")
+          # Separar lista por comas en array bash
+          IFS=',' read -r -a USERS <<< "$EXPECTED_USERS"
 
           MERGED_USERS=$(gh pr list --repo ${{ github.repository }} \
             --state merged --limit 1000 --json author \
@@ -54,8 +30,8 @@ jobs:
           echo "=== ESTADO DE MERGES ==="
           for user in "${USERS[@]}"; do
             if echo "$MERGED_USERS" | grep -q "^${user}$"; then
-              echo "✓ $user"
+              echo "User $user has merged PRs."
             else
-              echo "✗ $user"
+              echo "User $user has NOT merged PRs."
             fi
           done
