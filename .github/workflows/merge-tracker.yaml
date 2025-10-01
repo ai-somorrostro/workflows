@@ -30,8 +30,8 @@ jobs:
           echo "=== ESTADO DE MERGES ==="
           for user in "${USERS[@]}"; do
             if echo "$MERGED_USERS" | grep -q "^${user}$"; then
-              echo "User $user has merged PRs."
+              echo "✓ User $user has merged PRs."
             else
-              echo "User $user has NOT merged PRs."
+              echo "✘ User $user has NOT merged PRs."
             fi
           done
