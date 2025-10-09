@@ -5,6 +5,10 @@ on:
     - cron: '59 23 * * *'  # 23:59 UTC daily
   workflow_dispatch:  # Manual trigger
 
+permissions:
+  contents: read
+  issues: write
+
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
