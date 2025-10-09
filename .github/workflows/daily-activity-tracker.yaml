@@ -1,0 +1,93 @@
+name: Daily Activity Tracker
+
+on:
+  schedule:
+    - cron: '59 23 * * *'  # 23:59 UTC daily
+  workflow_dispatch:  # Manual trigger
+
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+
+jobs:
+  collect-activity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Collect daily activity and create issue
+        env:
+          GH_TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          TOMORROW=$(date -u -d "tomorrow" +%Y-%m-%d)
+          
+          REPORT="# Daily Activity Report - ${TODAY}\n\n"
+          REPORT+="Generated at: $(date -u)\n\n"
+          
+          # Read repos from analized_repos.txt
+          if [ ! -f "analized_repos.txt" ]; then
+            echo "Error: analized_repos.txt not found"
+            exit 1
+          fi
+          
+          while IFS= read -r repo || [ -n "$repo" ]; do
+            # Skip empty lines and comments
+            [[ -z "$repo" || "$repo" =~ ^[[:space:]]*# ]] && continue
+            
+            REPORT+="## Repository: ${repo}\n\n"
+            
+            # Get commits from today
+            REPORT+="### Commits\n"
+            COMMITS=$(gh api \
+              "/repos/${repo}/commits?since=${TODAY}T00:00:00Z&until=${TOMORROW}T00:00:00Z" \
+              --jq '.[] | "- \`\(.sha[0:7])\` **\(.commit.author.name)**: \(.commit.message | split("\n")[0])"' 2>&1)
+            
+            if [ $? -eq 0 ] && [ -n "$COMMITS" ]; then
+              REPORT+="${COMMITS}\n"
+            else
+              REPORT+="- No commits today\n"
+            fi
+            REPORT+="\n"
+            
+            # Get branch activity and merged PRs
+            REPORT+="### Branch Activity\n"
+            
+            # Get branches created today
+            BRANCHES=$(gh api \
+              "/repos/${repo}/branches" \
+              --paginate \
+              --jq '.[] | select(.commit.commit.author.date | startswith("'${TODAY}'")) | 
+                     "- Created: **\(.name)** by \(.commit.commit.author.name)"' 2>&1)
+            
+            if [ $? -eq 0 ] && [ -n "$BRANCHES" ]; then
+              REPORT+="${BRANCHES}\n"
+            fi
+            
+            # Get merged PRs today
+            MERGED_PRS=$(gh api \
+              "/repos/${repo}/pulls?state=closed&sort=updated&direction=desc" \
+              --paginate \
+              --jq '.[] | select(.merged_at != null and (.merged_at | startswith("'${TODAY}'"))) | 
+                     "- Merged PR #\(.number): **\(.title)** by \(.user.login) (merged by \(.merged_by.login))"' 2>&1)
+            
+            if [ $? -eq 0 ] && [ -n "$MERGED_PRS" ]; then
+              REPORT+="${MERGED_PRS}\n"
+            fi
+            
+            if [ -z "$BRANCHES" ] && [ -z "$MERGED_PRS" ]; then
+              REPORT+="- No branch activity detected\n"
+            fi
+            
+            REPORT+="\n---\n\n"
+            
+          done < analized_repos.txt
+          
+          # Create issue in THIS repo
+          echo -e "$REPORT" | gh issue create \
+            --repo ${{ github.repository }} \
+            --title "Daily Activity Report - ${TODAY}" \
+            --body-file - \
+            --label "daily-report"
+          
+          echo "Issue created successfully!"
