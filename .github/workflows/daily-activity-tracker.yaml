@@ -61,9 +61,9 @@ jobs:
             # Get branch activity and merged PRs
             echo "### Branch Activity" >> "${REPORT_FILE}"
             
-            # Get branches created today
+            # Get branches created today (with null check)
             BRANCHES=$(gh api "/repos/${repo}/branches" --paginate \
-              --jq '.[] | select(.commit.commit.author.date | startswith("'${TODAY}'")) | 
+              --jq '.[] | select(.commit.commit.author.date != null and (.commit.commit.author.date | startswith("'${TODAY}'"))) | 
                      "- Created: **\(.name)** by \(.commit.commit.author.name)"' 2>&1)
             
             HAS_ACTIVITY=0
@@ -95,15 +95,11 @@ jobs:
           echo "Report contents:"
           cat "${REPORT_FILE}"
           
-          # Ensure label exists
-          gh label create "daily-report" --repo ${{ github.repository }} --color "0E8A16" --description "Daily activity reports" 2>/dev/null || true
-          
-          # Create issue in THIS repo
+          # Create issue without label (simpler and more reliable)
           gh issue create \
             --repo ${{ github.repository }} \
             --title "Daily Activity Report - ${TODAY}" \
-            --body-file "${REPORT_FILE}" \
-            --label "daily-report"
+            --body-file "${REPORT_FILE}"
           
           EXIT_CODE=$?
           rm -f "${REPORT_FILE}"
