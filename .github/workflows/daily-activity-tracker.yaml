@@ -10,7 +10,7 @@ permissions:
   issues: write
 
 env:
-  GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+  GH_TOKEN: ${{ secrets.WORKFLOWS }}
 
 jobs:
   collect-activity:
@@ -53,9 +53,10 @@ jobs:
             # Get commits from today
             echo "### Commits" >> "${REPORT_FILE}"
             COMMITS=$(gh api "/repos/${repo}/commits?since=${TODAY}T00:00:00Z&until=${TOMORROW}T00:00:00Z" \
-              --jq '.[] | "- `\(.sha[0:7])` **\(.commit.author.name)**: \(.commit.message | split("\n")[0])"' 2>&1)
+              --jq '.[] | "- `\(.sha[0:7])` **\(.commit.author.name)**: \(.commit.message | split("\n")[0])"' 2>/dev/null)
+            COMMITS_EXIT=$?
             
-            if [ $? -eq 0 ] && [ -n "$COMMITS" ]; then
+            if [ $COMMITS_EXIT -eq 0 ] && [ -n "$COMMITS" ]; then
               echo "$COMMITS" >> "${REPORT_FILE}"
             else
               echo "- No commits today" >> "${REPORT_FILE}"
@@ -68,10 +69,11 @@ jobs:
             # Get branches created today (with null check)
             BRANCHES=$(gh api "/repos/${repo}/branches" --paginate \
               --jq '.[] | select(.commit.commit.author.date != null and (.commit.commit.author.date | startswith("'${TODAY}'"))) | 
-                     "- Created: **\(.name)** by \(.commit.commit.author.name)"' 2>&1)
+                     "- Created: **\(.name)** by \(.commit.commit.author.name)"' 2>/dev/null)
+            BRANCHES_EXIT=$?
             
             HAS_ACTIVITY=0
-            if [ $? -eq 0 ] && [ -n "$BRANCHES" ]; then
+            if [ $BRANCHES_EXIT -eq 0 ] && [ -n "$BRANCHES" ]; then
               echo "$BRANCHES" >> "${REPORT_FILE}"
               HAS_ACTIVITY=1
             fi
@@ -79,9 +81,10 @@ jobs:
             # Get merged PRs today
             MERGED_PRS=$(gh api "/repos/${repo}/pulls?state=closed&sort=updated&direction=desc" --paginate \
               --jq '.[] | select(.merged_at != null and (.merged_at | startswith("'${TODAY}'"))) | 
-                     "- Merged PR #\(.number): **\(.title)** by \(.user.login) (merged by \(.merged_by.login))"' 2>&1)
+                     "- Merged PR #\(.number): **\(.title)** by \(.user.login) (merged by \(.merged_by.login))"' 2>/dev/null)
+            MERGED_PRS_EXIT=$?
             
-            if [ $? -eq 0 ] && [ -n "$MERGED_PRS" ]; then
+            if [ $MERGED_PRS_EXIT -eq 0 ] && [ -n "$MERGED_PRS" ]; then
               echo "$MERGED_PRS" >> "${REPORT_FILE}"
               HAS_ACTIVITY=1
             fi
