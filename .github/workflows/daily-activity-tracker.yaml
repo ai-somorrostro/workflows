@@ -19,11 +19,17 @@ jobs:
         env:
           GH_TOKEN: ${{ env.GH_TOKEN }}
         run: |
+          set +e  # Don't exit on errors, handle them gracefully
+          
           TODAY=$(date -u +%Y-%m-%d)
           TOMORROW=$(date -u -d "tomorrow" +%Y-%m-%d)
           
-          REPORT="# Daily Activity Report - ${TODAY}\n\n"
-          REPORT+="Generated at: $(date -u)\n\n"
+          REPORT_FILE=$(mktemp)
+          
+          echo "# Daily Activity Report - ${TODAY}" > "${REPORT_FILE}"
+          echo "" >> "${REPORT_FILE}"
+          echo "Generated at: $(date -u)" >> "${REPORT_FILE}"
+          echo "" >> "${REPORT_FILE}"
           
           # Read repos from analized_repos.txt
           if [ ! -f "analized_repos.txt" ]; then
@@ -35,59 +41,76 @@ jobs:
             # Skip empty lines and comments
             [[ -z "$repo" || "$repo" =~ ^[[:space:]]*# ]] && continue
             
-            REPORT+="## Repository: ${repo}\n\n"
+            echo "Processing repo: ${repo}"
+            
+            echo "## Repository: ${repo}" >> "${REPORT_FILE}"
+            echo "" >> "${REPORT_FILE}"
             
             # Get commits from today
-            REPORT+="### Commits\n"
-            COMMITS=$(gh api \
-              "/repos/${repo}/commits?since=${TODAY}T00:00:00Z&until=${TOMORROW}T00:00:00Z" \
-              --jq '.[] | "- \`\(.sha[0:7])\` **\(.commit.author.name)**: \(.commit.message | split("\n")[0])"' 2>&1)
+            echo "### Commits" >> "${REPORT_FILE}"
+            COMMITS=$(gh api "/repos/${repo}/commits?since=${TODAY}T00:00:00Z&until=${TOMORROW}T00:00:00Z" \
+              --jq '.[] | "- `\(.sha[0:7])` **\(.commit.author.name)**: \(.commit.message | split("\n")[0])"' 2>&1)
             
             if [ $? -eq 0 ] && [ -n "$COMMITS" ]; then
-              REPORT+="${COMMITS}\n"
+              echo "$COMMITS" >> "${REPORT_FILE}"
             else
-              REPORT+="- No commits today\n"
+              echo "- No commits today" >> "${REPORT_FILE}"
             fi
-            REPORT+="\n"
+            echo "" >> "${REPORT_FILE}"
             
             # Get branch activity and merged PRs
-            REPORT+="### Branch Activity\n"
+            echo "### Branch Activity" >> "${REPORT_FILE}"
             
             # Get branches created today
-            BRANCHES=$(gh api \
-              "/repos/${repo}/branches" \
-              --paginate \
+            BRANCHES=$(gh api "/repos/${repo}/branches" --paginate \
               --jq '.[] | select(.commit.commit.author.date | startswith("'${TODAY}'")) | 
                      "- Created: **\(.name)** by \(.commit.commit.author.name)"' 2>&1)
             
+            HAS_ACTIVITY=0
             if [ $? -eq 0 ] && [ -n "$BRANCHES" ]; then
-              REPORT+="${BRANCHES}\n"
+              echo "$BRANCHES" >> "${REPORT_FILE}"
+              HAS_ACTIVITY=1
             fi
             
             # Get merged PRs today
-            MERGED_PRS=$(gh api \
-              "/repos/${repo}/pulls?state=closed&sort=updated&direction=desc" \
-              --paginate \
+            MERGED_PRS=$(gh api "/repos/${repo}/pulls?state=closed&sort=updated&direction=desc" --paginate \
               --jq '.[] | select(.merged_at != null and (.merged_at | startswith("'${TODAY}'"))) | 
                      "- Merged PR #\(.number): **\(.title)** by \(.user.login) (merged by \(.merged_by.login))"' 2>&1)
             
             if [ $? -eq 0 ] && [ -n "$MERGED_PRS" ]; then
-              REPORT+="${MERGED_PRS}\n"
+              echo "$MERGED_PRS" >> "${REPORT_FILE}"
+              HAS_ACTIVITY=1
             fi
             
-            if [ -z "$BRANCHES" ] && [ -z "$MERGED_PRS" ]; then
-              REPORT+="- No branch activity detected\n"
+            if [ $HAS_ACTIVITY -eq 0 ]; then
+              echo "- No branch activity detected" >> "${REPORT_FILE}"
             fi
             
-            REPORT+="\n---\n\n"
+            echo "" >> "${REPORT_FILE}"
+            echo "---" >> "${REPORT_FILE}"
+            echo "" >> "${REPORT_FILE}"
             
           done < analized_repos.txt
           
+          echo "Report contents:"
+          cat "${REPORT_FILE}"
+          
+          # Ensure label exists
+          gh label create "daily-report" --repo ${{ github.repository }} --color "0E8A16" --description "Daily activity reports" 2>/dev/null || true
+          
           # Create issue in THIS repo
-          echo -e "$REPORT" | gh issue create \
+          gh issue create \
             --repo ${{ github.repository }} \
             --title "Daily Activity Report - ${TODAY}" \
-            --body-file - \
+            --body-file "${REPORT_FILE}" \
             --label "daily-report"
           
-          echo "Issue created successfully!"
+          EXIT_CODE=$?
+          rm -f "${REPORT_FILE}"
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Issue created successfully!"
+          else
+            echo "Failed to create issue. Exit code: $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
