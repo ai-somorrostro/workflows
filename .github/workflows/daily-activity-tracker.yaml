@@ -2,7 +2,7 @@ name: Daily Activity Tracker
 
 on:
   schedule:
-    - cron: '59 23 * * *'  # 23:59 UTC daily
+    - cron: '50 21 * * *'  # 21:50 UTC daily
   workflow_dispatch:  # Manual trigger
 
 permissions:
