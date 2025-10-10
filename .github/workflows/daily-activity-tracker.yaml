@@ -52,12 +52,18 @@ jobs:
             
             # Get commits from today
             echo "### Commits" >> "${REPORT_FILE}"
-            COMMITS=$(gh api "/repos/${repo}/commits?since=${TODAY}T00:00:00Z&until=${TOMORROW}T00:00:00Z" \
-              --jq '.[] | "- `\(.sha[0:7])` **\(.commit.author.name)**: \(.commit.message | split("\n")[0])"' 2>/dev/null)
+            COMMIT_SHAS=$(gh api "/repos/${repo}/commits?since=${TODAY}T00:00:00Z&until=${TOMORROW}T00:00:00Z" \
+              --jq '.[].sha' 2>/dev/null)
             COMMITS_EXIT=$?
             
-            if [ $COMMITS_EXIT -eq 0 ] && [ -n "$COMMITS" ]; then
-              echo "$COMMITS" >> "${REPORT_FILE}"
+            if [ $COMMITS_EXIT -eq 0 ] && [ -n "$COMMIT_SHAS" ]; then
+              while IFS= read -r sha; do
+                COMMIT_DATA=$(gh api "/repos/${repo}/commits/${sha}" \
+                  --jq '"- `\(.sha[0:7])` **\(.commit.author.name)**: \(.commit.message | split("\n")[0]) `[+\(.stats.additions)/-\(.stats.deletions)]`"' 2>/dev/null)
+                if [ $? -eq 0 ]; then
+                  echo "$COMMIT_DATA" >> "${REPORT_FILE}"
+                fi
+              done <<< "$COMMIT_SHAS"
             else
               echo "- No commits today" >> "${REPORT_FILE}"
             fi
